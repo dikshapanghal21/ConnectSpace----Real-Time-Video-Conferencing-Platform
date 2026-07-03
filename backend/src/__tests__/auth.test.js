@@ -1,0 +1,133 @@
+import { jest } from "@jest/globals";
+import mongoose from "mongoose";
+import request from "supertest";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import app from "../app.js";
+import { User } from "../models/user.model.js";
+
+let mongod;
+
+beforeAll(async () => {
+    // Tests need a JWT_SECRET; use a throwaway one so this suite never
+    // depends on (or risks leaking) real secrets from .env.
+    process.env.JWT_SECRET = "test_secret_do_not_use_in_prod";
+
+    mongod = await MongoMemoryServer.create();
+    await mongoose.connect(mongod.getUri());
+});
+
+afterEach(async () => {
+    await User.deleteMany({});
+});
+
+afterAll(async () => {
+    await mongoose.disconnect();
+    await mongod.stop();
+});
+
+describe("POST /api/v1/users/register", () => {
+    it("creates a new user with a hashed password", async () => {
+        const res = await request(app)
+            .post("/api/v1/users/register")
+            .send({ name: "Ada Lovelace", username: "ada", password: "secretpw" });
+
+        expect(res.status).toBe(201);
+
+        const stored = await User.findOne({ username: "ada" });
+        expect(stored).not.toBeNull();
+        expect(stored.password).not.toBe("secretpw"); // must be hashed, not plaintext
+    });
+
+    it("rejects a duplicate username", async () => {
+        await request(app)
+            .post("/api/v1/users/register")
+            .send({ name: "Ada Lovelace", username: "ada", password: "secretpw" });
+
+        const res = await request(app)
+            .post("/api/v1/users/register")
+            .send({ name: "Someone Else", username: "ada", password: "otherpw" });
+
+        expect(res.status).toBe(409);
+    });
+
+    it("rejects a password shorter than 6 characters", async () => {
+        const res = await request(app)
+            .post("/api/v1/users/register")
+            .send({ name: "Ada Lovelace", username: "ada", password: "abc" });
+
+        expect(res.status).toBe(400);
+    });
+
+    it("rejects missing fields", async () => {
+        const res = await request(app)
+            .post("/api/v1/users/register")
+            .send({ username: "ada" });
+
+        expect(res.status).toBe(400);
+    });
+});
+
+describe("POST /api/v1/users/login", () => {
+    beforeEach(async () => {
+        await request(app)
+            .post("/api/v1/users/register")
+            .send({ name: "Ada Lovelace", username: "ada", password: "secretpw" });
+    });
+
+    it("logs in with correct credentials and returns a JWT", async () => {
+        const res = await request(app)
+            .post("/api/v1/users/login")
+            .send({ username: "ada", password: "secretpw" });
+
+        expect(res.status).toBe(200);
+        expect(typeof res.body.token).toBe("string");
+        expect(res.body.token.split(".")).toHaveLength(3); // header.payload.signature
+    });
+
+    it("rejects an incorrect password", async () => {
+        const res = await request(app)
+            .post("/api/v1/users/login")
+            .send({ username: "ada", password: "wrongpw" });
+
+        expect(res.status).toBe(401);
+    });
+
+    it("rejects a nonexistent user", async () => {
+        const res = await request(app)
+            .post("/api/v1/users/login")
+            .send({ username: "nobody", password: "whatever" });
+
+        expect(res.status).toBe(404);
+    });
+});
+
+describe("GET /api/v1/users/get_all_activity (protected route)", () => {
+    it("rejects requests with no token", async () => {
+        const res = await request(app).get("/api/v1/users/get_all_activity");
+        expect(res.status).toBe(401);
+    });
+
+    it("rejects requests with a malformed token", async () => {
+        const res = await request(app)
+            .get("/api/v1/users/get_all_activity")
+            .set("Authorization", "Bearer not-a-real-token");
+        expect(res.status).toBe(401);
+    });
+
+    it("accepts requests with a valid token from login", async () => {
+        await request(app)
+            .post("/api/v1/users/register")
+            .send({ name: "Ada Lovelace", username: "ada", password: "secretpw" });
+
+        const loginRes = await request(app)
+            .post("/api/v1/users/login")
+            .send({ username: "ada", password: "secretpw" });
+
+        const res = await request(app)
+            .get("/api/v1/users/get_all_activity")
+            .set("Authorization", `Bearer ${loginRes.body.token}`);
+
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body)).toBe(true);
+    });
+});
