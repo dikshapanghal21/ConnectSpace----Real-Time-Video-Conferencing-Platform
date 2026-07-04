@@ -1,6 +1,6 @@
 import axios      from "axios";
 import httpStatus from "http-status";
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import server from "../environment";
 
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
     const [userData, setUserData] = useState(authContext);
     const navigate = useNavigate();
 
-    const handleRegister = async (name, username, password) => {
+    const handleRegister = useCallback(async (name, username, password) => {
         try {
             const res = await client.post("/register", { name, username, password });
             if (res.status === httpStatus.CREATED) {
@@ -45,9 +45,9 @@ export const AuthProvider = ({ children }) => {
         } catch (err) {
             throw err;
         }
-    };
+    }, []);
 
-    const handleLogin = async (username, password) => {
+    const handleLogin = useCallback(async (username, password) => {
         try {
             const res = await client.post("/login", { username, password });
             if (res.status === httpStatus.OK) {
@@ -58,35 +58,35 @@ export const AuthProvider = ({ children }) => {
         } catch (err) {
             throw err;
         }
-    };
+    }, [navigate]);
 
     // Token is sent automatically via the axios interceptor above
-    const getHistoryOfUser = async () => {
+    const getHistoryOfUser = useCallback(async () => {
         try {
             const res = await client.get("/get_all_activity");
             return res.data;
         } catch (err) {
             throw err;
         }
-    };
+    }, []);
 
-    const addToUserHistory = async (meetingCode) => {
+    const addToUserHistory = useCallback(async (meetingCode) => {
         try {
             const res = await client.post("/add_to_activity", { meeting_code: meetingCode });
             return res;
         } catch (err) {
             throw err;
         }
-    };
+    }, []);
 
-    const clearUserHistory = async () => {
+    const clearUserHistory = useCallback(async () => {
         try {
             const res = await client.delete("/clear_activity");
             return res;
         } catch (err) {
             throw err;
         }
-    };
+    }, []);
 
     const data = { userData, setUserData, addToUserHistory, getHistoryOfUser, clearUserHistory, handleRegister, handleLogin };
 
