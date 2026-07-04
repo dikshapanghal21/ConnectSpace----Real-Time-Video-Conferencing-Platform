@@ -42,7 +42,7 @@ const findRoom = (socketId) => {
 export const connectToSocket = (server) => {
     // Same allowlist logic as app.js — kept in sync via the same env var
     // so you only ever set FRONTEND_URL in one place.
-    const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
+    const allowedOrigins = (process.env.FRONTEND_URL || "https://connect-space-real-time-video-confe.vercel.app")
         .split(",")
         .map(o => o.trim());
 
