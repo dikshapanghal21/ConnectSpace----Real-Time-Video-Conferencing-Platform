@@ -11,7 +11,7 @@ export default function History() {
 
     useEffect(() => {
         getHistoryOfUser().then(setMeetings).catch(() => {});
-    }, []);
+    }, [getHistoryOfUser]);
 
     const handleRejoin = async (code) => {
         await addToUserHistory(code);
