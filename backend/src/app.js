@@ -14,7 +14,7 @@ const app = express();
 // production (comma-separated if you have more than one, e.g. a Vercel
 // preview + production URL). Falls back to common local dev ports when
 // unset so `npm run dev` keeps working out of the box.
-const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
+const allowedOrigins = (process.env.FRONTEND_URL || "https://connect-space-real-time-video-confe.vercel.app")
     .split(",")
     .map(o => o.trim());
 
