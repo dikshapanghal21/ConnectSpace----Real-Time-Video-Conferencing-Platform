@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import '../App.css';
 
 export default function History() {
-    const { getHistoryOfUser, addToUserHistory } = useContext(AuthContext);
+    const { getHistoryOfUser, addToUserHistory, clearUserHistory } = useContext(AuthContext);
     const [meetings, setMeetings] = useState([]);
+    const [clearing, setClearing] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -14,7 +15,25 @@ export default function History() {
 
     const handleRejoin = async (code) => {
         await addToUserHistory(code);
-        navigate(`/${code}`);
+        // autoRejoin: skip the "type your name" screen — VideoMeet.jsx
+        // uses the logged-in account's name and joins immediately. If the
+        // meeting has since ended, it shows "Meeting ended" right away
+        // instead of asking for a name first.
+        navigate(`/${code}`, { state: { autoRejoin: true } });
+    };
+
+    const handleClearHistory = async () => {
+        if (meetings.length === 0) return;
+        if (!window.confirm('Clear all meeting history? This can\'t be undone.')) return;
+        setClearing(true);
+        try {
+            await clearUserHistory();
+            setMeetings([]);
+        } catch {
+            alert('Could not clear history — please try again.');
+        } finally {
+            setClearing(false);
+        }
     };
 
     const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -33,6 +52,12 @@ export default function History() {
                 <div className="historyHeader">
                     <h2>Meeting history</h2>
                     <span style={{ fontSize: '0.78rem', color: '#55555f', marginLeft: 'auto' }}>{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+                    {meetings.length > 0 && (
+                        <button onClick={handleClearHistory} disabled={clearing}
+                            style={{ background: 'transparent', border: '1px solid rgba(220,64,64,0.3)', color: '#dc4040', fontSize: '0.76rem', padding: '5px 12px', borderRadius: 5, cursor: clearing ? 'default' : 'pointer', fontFamily: 'inherit', marginLeft: 10, opacity: clearing ? 0.6 : 1 }}>
+                            {clearing ? 'Clearing…' : 'Clear history'}
+                        </button>
+                    )}
                 </div>
 
                 {meetings.length === 0 ? (

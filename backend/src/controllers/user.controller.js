@@ -133,4 +133,18 @@ const addToHistory = async (req, res) => {
     }
 };
 
-export { login, register, getUserHistory, addToHistory };
+// ─────────────────────────────────────────────
+//  DELETE /api/v1/users/clear_activity
+//  Protected — requires verifyToken middleware
+// ─────────────────────────────────────────────
+const clearHistory = async (req, res) => {
+    try {
+        await Meeting.deleteMany({ user_id: req.user.username });
+        return res.status(httpStatus.OK).json({ message: "History cleared" });
+    } catch (e) {
+        console.error("Clear history error:", e.message);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export { login, register, getUserHistory, addToHistory, clearHistory };

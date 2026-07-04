@@ -131,3 +131,38 @@ describe("GET /api/v1/users/get_all_activity (protected route)", () => {
         expect(Array.isArray(res.body)).toBe(true);
     });
 });
+
+describe("DELETE /api/v1/users/clear_activity (protected route)", () => {
+    it("rejects requests with no token", async () => {
+        const res = await request(app).delete("/api/v1/users/clear_activity");
+        expect(res.status).toBe(401);
+    });
+
+    it("clears all history for the logged-in user only", async () => {
+        // Ada logs in and adds a meeting
+        await request(app).post("/api/v1/users/register").send({ name: "Ada Lovelace", username: "ada", password: "secretpw" });
+        const adaLogin = await request(app).post("/api/v1/users/login").send({ username: "ada", password: "secretpw" });
+        await request(app).post("/api/v1/users/add_to_activity")
+            .set("Authorization", `Bearer ${adaLogin.body.token}`)
+            .send({ meeting_code: "ada-meeting-1" });
+
+        // Grace logs in and adds a meeting — should be unaffected by Ada's clear
+        await request(app).post("/api/v1/users/register").send({ name: "Grace Hopper", username: "grace", password: "secretpw" });
+        const graceLogin = await request(app).post("/api/v1/users/login").send({ username: "grace", password: "secretpw" });
+        await request(app).post("/api/v1/users/add_to_activity")
+            .set("Authorization", `Bearer ${graceLogin.body.token}`)
+            .send({ meeting_code: "grace-meeting-1" });
+
+        const clearRes = await request(app).delete("/api/v1/users/clear_activity")
+            .set("Authorization", `Bearer ${adaLogin.body.token}`);
+        expect(clearRes.status).toBe(200);
+
+        const adaHistory = await request(app).get("/api/v1/users/get_all_activity")
+            .set("Authorization", `Bearer ${adaLogin.body.token}`);
+        expect(adaHistory.body).toEqual([]);
+
+        const graceHistory = await request(app).get("/api/v1/users/get_all_activity")
+            .set("Authorization", `Bearer ${graceLogin.body.token}`);
+        expect(graceHistory.body).toHaveLength(1);
+    });
+});

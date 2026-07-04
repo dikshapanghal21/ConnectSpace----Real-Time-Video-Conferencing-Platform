@@ -614,6 +614,24 @@
       display: block;
   }
 
+  /* Shown to the presenter instead of a live self-preview — see the code
+     comment above where this is used for why a live loopback of your own
+     screen capture causes an infinite recursive "hall of mirrors" effect. */
+  .presentingPlaceholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--text2);
+      background: #0b0b0d;
+  }
+  .presentingPlaceholder svg { color: var(--accent); }
+  .presentingPlaceholder p   { font-size: 0.95rem; color: var(--text); margin: 4px 0 0; font-weight: 500; }
+  .presentingPlaceholder span { font-size: 0.78rem; color: var(--text3); }
+
   .presentingBadge {
       position: absolute;
       top: 10px;

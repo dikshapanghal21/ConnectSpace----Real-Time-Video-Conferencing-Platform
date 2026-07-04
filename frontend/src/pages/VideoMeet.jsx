@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import io from 'socket.io-client';
 import { Badge, IconButton, Tooltip } from '@mui/material';
 import VideocamIcon              from '@mui/icons-material/Videocam';
@@ -40,6 +41,20 @@ const EMOJIS = [
 ];
 
 const TILE_COLORS = ['#6366f1','#a855f7','#06b6d4','#22c55e','#f59e0b','#ef4444','#ec4899','#14b8a6'];
+
+// The login JWT payload already includes the account's display name
+// (see backend user.controller.js). Decoding it client-side (no signature
+// check needed — we're just reading a display label, the server still
+// verifies the token on every real request) lets a "Rejoin" click skip
+// straight to joining instead of asking the user to retype their name.
+function getAccountName() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return null;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload?.name || null;
+    } catch { return null; }
+}
 
 function SimpleQR({ text }) {
     const url = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(text)}&bgcolor=18181b&color=818cf8&format=svg`;
@@ -109,6 +124,13 @@ const SpotlightRemoteVideo = React.memo(({ stream, name, tileRef }) => {
 });
 
 export default function VideoMeetComponent() {
+    // Set when navigated here from History's "Rejoin" button (see history.jsx).
+    // Lets us skip the manual name-entry screen and join immediately — if
+    // the meeting has since ended, connectToSocketServer's existing
+    // 'room-closed' handling shows "Meeting ended" right away instead.
+    const location = useLocation();
+    const autoRejoinRef = useRef(false);
+
     // ── Refs ──
     const socketRef        = useRef();
     const socketIdRef      = useRef();
@@ -340,6 +362,27 @@ export default function VideoMeetComponent() {
         setTimeout(() => connectToSocketServer(), 800);
     };
 
+    // ── Auto-rejoin from History ──
+    // Grab the account name once on mount if we arrived via "Rejoin".
+    useEffect(() => {
+        if (location.state?.autoRejoin) {
+            const name = getAccountName();
+            if (name) { autoRejoinRef.current = true; setUsername(name); }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    // Once that name lands in state, immediately trigger the join — the
+    // user never sees the "type your name" screen. If the meeting has
+    // ended, the existing room-closed handling in connectToSocketServer
+    // takes it from there and shows "Meeting ended".
+    useEffect(() => {
+        if (autoRejoinRef.current && username && phase === 'lobby') {
+            autoRejoinRef.current = false;
+            handleJoin();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [username]);
+
     // ── In-meeting controls ──
     const handleVideo = () => {
         const v = !video; setVideo(v);
@@ -363,9 +406,25 @@ export default function VideoMeetComponent() {
     const handleScreen = async () => {
         if (!screen) {
             try {
-                const ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                let ds;
+                try {
+                    // selfBrowserSurface: 'exclude' removes "this tab" from
+                    // Chrome's share picker entirely — the actual source of
+                    // most hall-of-mirrors recursion is someone accidentally
+                    // sharing the very tab that's running the call. This is
+                    // a real (if Chromium-only) browser API for exactly this
+                    // problem, not just a cosmetic workaround. Older/other
+                    // browsers throw on the unknown option, so fall back.
+                    ds = await navigator.mediaDevices.getDisplayMedia({
+                        video: true, audio: true, selfBrowserSurface: 'exclude'
+                    });
+                } catch {
+                    ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                }
                 window.localStream = ds;
-                if (localVideoref.current) localVideoref.current.srcObject = ds;
+                // Deliberately NOT assigning `ds` to localVideoref here (even
+                // transiently) — see the spotlight render below for why a
+                // live loopback of your own capture recurses infinitely.
                 await renegotiateStream(ds);
                 ds.getTracks().forEach(t => {
                     // Fires both on our own "Stop sharing" click and when the
@@ -752,7 +811,19 @@ export default function VideoMeetComponent() {
                             <div className={styles.spotlightMain}>
                                 {spotlightId === 'local' ? (
                                     <div ref={el => { tileElRefs.current['local'] = el; }} className={styles.spotlightTile}>
-                                        <video ref={localVideoref} autoPlay muted playsInline className={styles.spotlightVideo} />
+                                        {/* No live self-preview here on purpose: if you're sharing your
+                                            whole screen, this browser tab (and this very video) is part
+                                            of what's being captured — rendering it back to yourself
+                                            creates an infinite recursive "hall of mirrors" effect
+                                            (screen within screen within screen). Real conferencing apps
+                                            avoid this the same way: show the presenter a placeholder,
+                                            not a live loopback of their own capture. Everyone else sees
+                                            the actual shared content normally via SpotlightRemoteVideo. */}
+                                        <div className={styles.presentingPlaceholder}>
+                                            <ScreenShareIcon style={{ fontSize: 42 }} />
+                                            <p>You're sharing your screen</p>
+                                            <span>Everyone else in the meeting can see it</span>
+                                        </div>
                                         <div className={styles.presentingBadge}><ScreenShareIcon style={{ fontSize: 14 }} /> You are presenting</div>
                                         <button className={styles.spotlightStopBtn} onClick={handleScreen}>
                                             <StopScreenShareIcon style={{ fontSize: 15 }} /> Stop sharing

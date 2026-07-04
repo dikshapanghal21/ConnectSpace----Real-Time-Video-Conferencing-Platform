@@ -79,7 +79,16 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const data = { userData, setUserData, addToUserHistory, getHistoryOfUser, handleRegister, handleLogin };
+    const clearUserHistory = async () => {
+        try {
+            const res = await client.delete("/clear_activity");
+            return res;
+        } catch (err) {
+            throw err;
+        }
+    };
+
+    const data = { userData, setUserData, addToUserHistory, getHistoryOfUser, clearUserHistory, handleRegister, handleLogin };
 
     return (
         <AuthContext.Provider value={data}>
